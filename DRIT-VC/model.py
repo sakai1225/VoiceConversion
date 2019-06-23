@@ -235,12 +235,19 @@ class Generator(Chain):
             self.dec_x = Decoder()
             self.dec_y = Decoder()
 
+    def _calc_mean_var(self, x):
+        m = F.mean(x, axis=1, keepdims=True)
+        v = F.mean((x - F.broadcast_to(m, x.shape))*(x - F.broadcast_to(m, x.shape)), axis = 1)
+
+        return m, F.log(v)
+
     def _reconstruct(self, content, attr, switch='x'):
+        mean, ln_var = self._calc_mean_var(attr)
         if switch == 'x':
-            return self.dec_x(content, attr)
+            return self.dec_x(content, attr), mean, ln_var
 
         else:
-            return self.dec_y(content, attr)
+            return self.dec_y(content, attr), mean, ln_var
 
     def _get_random(self, enc, nz=8):
         batch = enc.shape[0]
@@ -282,8 +289,8 @@ class Generator(Chain):
         ya_recon = self._reconstruct(ha_content, ha_attribute, switch='x')
         yb_recon = self._reconstruct(hb_content, hb_attribute, switch='y')
 
-        ya_infer = self.mock_inference(ha_content, switch='x')
-        yb_infer = self.mock_inference(hb_content, switch='y')
+        ya_infer = self.mock_inference(ha_content, switch='y')
+        yb_infer = self.mock_inference(hb_content, switch='x')
 
         a_out = (ha_content, ha_attribute, ya, ya_recon, ya_infer)
         b_out = (hb_content, hb_attribute, yb, yb_recon, yb_infer)

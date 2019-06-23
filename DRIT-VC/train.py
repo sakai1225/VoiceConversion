@@ -188,6 +188,8 @@ for epoch in range(epochs):
         b_enc, b_attr, b_fake, b_recon, b_infer = b_out
         a_latent, a_infer, a_infer_attr = a_infer
         b_latent, b_infer, b_infer_attr = b_infer
+        a_recon, a_mean, a_var = a_recon
+        b_recon, b_mean, b_var = b_recon
         a_out, b_out = generator(a_fake, b_fake)
         _, _, aba_fake, _, _ = a_out
         _, _, bab_fake, _, _ = b_out
@@ -201,6 +203,8 @@ for epoch in range(epochs):
         gen_loss += cycle_weight * F.mean_absolute_error(bab_fake, y)
         gen_loss += cycle_weight * F.mean_absolute_error(a_recon, x)
         gen_loss += cycle_weight * F.mean_absolute_error(b_recon, y)
+        gen_loss += F.gaussian_kl_divergence(a_mean, a_var)
+        gen_loss += F.gaussian_kl_divergence(b_mean, b_var)
         gen_loss += cycle_weight * F.mean_absolute_error(a_latent, a_infer_attr)
         gen_loss += cycle_weight * F.mean_absolute_error(b_latent, b_infer_attr)
 
