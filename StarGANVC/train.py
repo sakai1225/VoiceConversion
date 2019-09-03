@@ -2,7 +2,7 @@ import chainer
 import chainer.functions as F
 import argparse
 
-from model import Generator, Discriminator
+from model import Generator, Discriminator, GeneratorWithCIN
 from dataset import DatasetLoader
 from utils import set_optimizer
 from pathlib import Path
@@ -20,6 +20,8 @@ class StarGANVC2LossFunction:
     def dis_loss(discriminator, y_fake, x, y_label, x_label):
         fake = discriminator(y_fake, F.concat([y_label, x_label]))
         real = discriminator(x, F.concat([x_label, y_label]))
+        #fake = discriminator(y_fake, y_label)
+        #"real = discriminator(x, x_label)
 
         return F.mean(F.softplus(-real)) + F.mean(F.softplus(fake))
 
@@ -42,7 +44,8 @@ def train(epochs, iterations, batchsize, outdir, data_path):
     dataloader = DatasetLoader(data_path)
 
     # Model & Optimizer Definition
-    generator = Generator()
+    #generator = Generator()
+    generator = GeneratorWithCIN()
     generator.to_gpu()
     gen_opt = set_optimizer(generator, alpha=0.0002)
 
@@ -69,9 +72,9 @@ def train(epochs, iterations, batchsize, outdir, data_path):
 
             y_fake = generator(x_sp, F.concat([y_label, x_label]))
             x_fake = generator(y_fake, F.concat([x_label, y_label]))
-            x_identity = generator(x_sp, F.concat([x_label, y_label]))
+            x_identity = generator(x_sp, F.concat([x_label, x_label]))
             loss = lossfunc.gen_loss(discriminator, y_fake, x_fake, x_sp, F.concat([y_label, x_label]))
-            if epoch < 100:
+            if epoch < 50:
                 loss += lossfunc.identity_loss(x_identity, x_sp)
 
             generator.cleargrads()
@@ -82,7 +85,7 @@ def train(epochs, iterations, batchsize, outdir, data_path):
             sum_loss += loss.data
 
             if batch == 0:
-                serializers.save_npz(f"modeldirv2/generator_{epoch}.model", generator)
+                serializers.save_npz(f"modeldirCIN/generator_{epoch}.model", generator)
                 serializers.save_npz('discriminator.model', discriminator)
 
         print(f"epoch: {epoch}")
@@ -96,7 +99,7 @@ if __name__ == "__main__":
     parser.add_argument('--b', type=int, default=16, help="batch size")
     args = parser.parse_args()
 
-    data_path = Path('./Dataset/starganvc/')
+    data_path = Path('./starganvc/')
     outdir = Path('outdir')
     outdir.mkdir(exist_ok=True)
 

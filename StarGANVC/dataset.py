@@ -87,8 +87,8 @@ class DatasetLoader:
             y_label_box.append(onehot)
 
         x_sp = self._variable(x_sp_box)
-        x_label = self._variable(x_label_box)
+        x_label = self._variable(x_label_box, array_type='float')
         y_sp = self._variable(y_sp_box)
-        y_label = self._variable(y_label_box)
+        y_label = self._variable(y_label_box, array_type='float')
 
         return (x_sp, x_label, y_sp, y_label)
