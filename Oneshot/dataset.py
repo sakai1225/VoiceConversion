@@ -6,6 +6,7 @@ import os
 from torch.utils.data import Dataset
 from librosa.core import load
 from pathlib import Path
+from utils import get_spectrograms
 
 
 class JVSPreprocess:
@@ -20,8 +21,8 @@ class JVSPreprocess:
                     audio,
                     melsize=512,
                     fftsize=2048,
-                    window_size=1100,
-                    window_shift_size=276):
+                    window_size=int(22050 * 0.05),
+                    window_shift_size=int(22050 * 0.0125)):
         """Conversion audio to mel-spectrogram
         
         Args:
@@ -47,10 +48,12 @@ class JVSPreprocess:
         return mel
 
     def _convert(self, path):
-        audio, _ = load(path, sr=self.sr, mono=True)
-        melsp = self.audio2melsp(audio)
+        #audio, _ = load(path, sr=self.sr, mono=True)
+        #melsp = self.audio2melsp(audio)
 
-        return melsp
+        melsp, _ = get_spectrograms(path)
+
+        return melsp.T
 
     def _save(self, speaker_path, speaker_out_path):
         nonpara_path = f"{str(speaker_path)}/nonpara30/wav24kHz16bit/"
@@ -116,7 +119,7 @@ class AudioCollate:
 
     def _prepare(self, melpath):
         melsp = np.load(melpath)
-        melsp = self._normalize(melsp)
+        #melsp = self._normalize(melsp)
         melsp = self._crop(melsp)
 
         return melsp
@@ -140,8 +143,8 @@ class AudioCollate:
 
 
 if __name__ == "__main__":
-    jvs_path = Path("./jvs_ver1/")
-    mel_path = Path("./melspectrogram/")
+    jvs_path = Path("./jvs_ver1")
+    mel_path = Path("./melspectrogram2/")
     mel_path.mkdir(exist_ok=True)
     preprocess = JVSPreprocess(jvs_path, mel_path)
     preprocess()

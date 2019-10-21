@@ -82,13 +82,15 @@ class Block(nn.Module):
             self.block = nn.Sequential(
                 nn.Conv1d(in_ch, out_ch, kernel, stride, 1),
                 nn.ReLU(),
+                nn.Dropout(p=0.0),
                 nn.InstanceNorm1d(out_ch)
             )
 
         else:
             self.block = nn.Sequential(
                 nn.Conv1d(in_ch, out_ch, kernel, stride, 1),
-                nn.ReLU()
+                nn.ReLU(),
+                nn.Dropout(p=0.0)
             )
 
     def forward(self, x):
@@ -104,13 +106,15 @@ class AdaINBlock(nn.Module):
             self.block = nn.Sequential(
                 nn.Upsample(scale_factor=2),
                 nn.Conv1d(in_ch, out_ch, 3, 1, 1),
-                nn.ReLU()
+                nn.ReLU(),
+                nn.Dropout(p=0.0)
             )
 
         else:
             self.block = nn.Sequential(
                 nn.Conv1d(in_ch, out_ch, 3, 1, 1),
-                nn.ReLU()
+                nn.ReLU(),
+                nn.Dropout(p=0.0)
             )
 
     def forward(self, x, z):
