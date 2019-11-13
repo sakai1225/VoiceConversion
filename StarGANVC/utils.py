@@ -1,4 +1,8 @@
-from chainer import optimizers
+import chainer
+
+from chainer import optimizers, cuda
+
+xp = cuda.cupy
 
 
 def set_optimizer(model, alpha, beta=0.5):
@@ -6,3 +10,10 @@ def set_optimizer(model, alpha, beta=0.5):
     optimizer.setup(model)
 
     return optimizer
+
+
+def call_zeros(tensor):
+    zeros = xp.zeros_like(tensor).astype(xp.float32)
+    zeros = chainer.as_variable(zeros)
+
+    return zeros

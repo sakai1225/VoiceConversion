@@ -15,17 +15,23 @@ def glu(x):
 
 
 class ConditionalInstanceNormalization(Chain):
-    def __init__(self, in_ch):
-        w = initializers.Normal(0.02)
+    def __init__(self, in_ch, adv_type='sat'):
+        w = initializers.GlorotUniform()
+        if adv_type == 'sat':
+            domain_ch = 8
+        elif adv_type == 'orig':
+            domain_ch = 4
+        else:
+            raise AttributeError
+
         super(ConditionalInstanceNormalization, self).__init__()
         with self.init_scope():
-            self.gamma = L.Linear(8, in_ch, initialW=w)
-            self.beta = L.Linear(8, in_ch, initialW=w)
+            self.gamma = L.Linear(domain_ch, in_ch, initialW=w)
+            self.beta = L.Linear(domain_ch, in_ch, initialW=w)
 
     def __call__(self, x, code):
         mean = F.mean(x, axis=2, keepdims=True)
         var = F.mean((x - F.broadcast_to(mean, x.shape)) * (x - F.broadcast_to(mean, x.shape)), axis=2, keepdims=True)
-        #var = F.mean((var - F.broadcast_to(mean, var.shape)) * (var - F.broadcast_to(mean, var.shape)), axis=3, keepdims=True)
         std = F.sqrt(var + 1e-8)
 
         width = x.shape[2]
@@ -42,7 +48,7 @@ class ConditionalInstanceNormalization(Chain):
 class C2BG(Chain):
     def __init__(self, in_ch, out_ch, up=False, down=False):
         super(C2BG, self).__init__()
-        w = initializers.Normal(0.02)
+        w = initializers.GlorotUniform()
         self.up = up
         self.down = down
         with self.init_scope():
@@ -67,9 +73,9 @@ class C2BG(Chain):
 
 
 class C1BG(Chain):
-    def __init__(self, in_ch, out_ch, up=False, down=False):
+    def __init__(self, in_ch, out_ch, adv_type='sat', up=False, down=False):
         super(C1BG, self).__init__()
-        w = initializers.Normal(0.02)
+        w = initializers.GlorotUniform()
         self.up = up
         self.down = down
         with self.init_scope():
@@ -78,7 +84,7 @@ class C1BG(Chain):
             self.cdown = L.Convolution1D(in_ch, out_ch, 4, 2, 1, initialW=w)
 
             #self.bn0 = L.BatchNormalization(out_ch)
-            self.cin0 = ConditionalInstanceNormalization(out_ch)
+            self.cin0 = ConditionalInstanceNormalization(out_ch, adv_type)
 
     def __call__(self, x, domain=None):
         if self.up:
@@ -96,14 +102,14 @@ class C1BG(Chain):
 
 
 class ResBlock(Chain):
-    def __init__(self, in_ch, out_ch):
-        w = initializers.Normal(0.02)
+    def __init__(self, in_ch, out_ch, adv_type='sat'):
+        w = initializers.GlorotUniform()
         super(ResBlock, self).__init__()
         with self.init_scope():
-            self.cbg0 = C1BG(in_ch, out_ch)
+            self.cbg0 = C1BG(in_ch, out_ch, adv_type)
             self.c0 = L.Convolution1D(in_ch, in_ch, 3, 1, 1, initialW=w)
             #self.bn0 = L.BatchNormalization(in_ch)
-            self.bn0 = ConditionalInstanceNormalization(in_ch)
+            self.bn0 = ConditionalInstanceNormalization(in_ch, adv_type)
 
     def __call__(self, x, domain):
         h = self.cbg0(x, domain)
@@ -111,18 +117,18 @@ class ResBlock(Chain):
         h = self.bn0(self.c0(h), domain)
         #h = self.bn0(self.c0(h))
 
-        return h + x
+        return h
 
 
 class Generator(Chain):
     def __init__(self, base=128):
-        w = initializers.Normal(0.02)
+        w = initializers.GlorotUniform()
         super(Generator, self).__init__()
         with self.init_scope():
             self.c0 = L.Convolution2D(1 + 4, base, (15, 5), 1, (7, 2), initialW=w)
             self.cbg0 = C2BG(int(base/2), base*2, down=True)
             self.cbg1 = C2BG(base, base*4, down=True)
-            
+
             self.c1 = L.Convolution1D(2304, base*2, 1, 1, 0, initialW=w)
             self.bn1 = L.BatchNormalization(base*2)
 
@@ -141,7 +147,7 @@ class Generator(Chain):
 
             self.cbg2 = C2BG(base*2 + 4, base*8, up=True)
             self.cbg3 = C2BG(base*4 + 4, 72, up=True)
-            
+
             self.c3 = L.Convolution2D(36, 1, 3, 1, 1, initialW=w)
 
     def _prepare(self, feat, domain):
@@ -184,33 +190,33 @@ class Generator(Chain):
 
 
 class GeneratorWithCIN(Chain):
-    def __init__(self, base=128):
-        w = initializers.Normal(0.02)
+    def __init__(self, base=128, adv_type='sat'):
+        w = initializers.GlorotUniform()
         super(GeneratorWithCIN, self).__init__()
         with self.init_scope():
             self.c0 = L.Convolution2D(1, base, (15, 5), 1, (7, 2), initialW=w)
             self.cbg0 = C2BG(int(base/2), base*2, down=True)
             self.cbg1 = C2BG(base, base*4, down=True)
-            
+
             self.c1 = L.Convolution1D(2304, base*2, 1, 1, 0, initialW=w)
             self.bn1 = L.BatchNormalization(base*2)
 
-            self.res0 = ResBlock(base*2, base*4)
-            self.res1 = ResBlock(base*2, base*4)
-            self.res2 = ResBlock(base*2, base*4)
-            self.res3 = ResBlock(base*2, base*4)
-            self.res4 = ResBlock(base*2, base*4)
-            self.res5 = ResBlock(base*2, base*4)
-            self.res6 = ResBlock(base*2, base*4)
-            self.res7 = ResBlock(base*2, base*4)
-            self.res8 = ResBlock(base*2, base*4)
+            self.res0 = ResBlock(base*2, base*4, adv_type)
+            self.res1 = ResBlock(base*2, base*4, adv_type)
+            self.res2 = ResBlock(base*2, base*4, adv_type)
+            self.res3 = ResBlock(base*2, base*4, adv_type)
+            self.res4 = ResBlock(base*2, base*4, adv_type)
+            self.res5 = ResBlock(base*2, base*4, adv_type)
+            self.res6 = ResBlock(base*2, base*4, adv_type)
+            self.res7 = ResBlock(base*2, base*4, adv_type)
+            self.res8 = ResBlock(base*2, base*4, adv_type)
 
             self.c2 = L.Convolution1D(base*2, 2304, 1, 1, 0, initialW=w)
             self.bn2 = L.BatchNormalization(2304)
 
             self.cbg2 = C2BG(base*2, base*8, up=True)
             self.cbg3 = C2BG(base*4, 72, up=True)
-            
+
             self.c3 = L.Convolution2D(36, 1, 3, 1, 1, initialW=w)
 
     def _prepare(self, feat, domain):
@@ -260,7 +266,7 @@ class BG(Chain):
 
 class Discriminator(Chain):
     def __init__(self, base=64):
-        w = initializers.Normal(0.02)
+        w = initializers.GlorotUniform()
         super(Discriminator, self).__init__()
 
         with self.init_scope():
@@ -275,7 +281,7 @@ class Discriminator(Chain):
             self.bg4 = BG(base*16)
             self.c5 = L.Convolution2D(base*8, 1, (3, 1), 1, (1, 0), initialW=w)
 
-            self.lembed = L.Linear(None, base*8, initialW=w)
+            self.lembed = L.Linear(None, base*8, nobias=True, initialW=w)
             self.l1 = L.Linear(None, 1, initialW=w)
 
     def __call__(self, x, category):
