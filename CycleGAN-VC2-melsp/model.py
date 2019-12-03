@@ -1,8 +1,8 @@
 import chainer
 import chainer.links as L
 import chainer.functions as F
+
 from chainer import cuda, Chain, initializers
-import numpy as np
 
 xp = cuda.cupy
 cuda.get_device(0).use()
@@ -21,9 +21,9 @@ class C2BG(Chain):
         self.up = up
         self.down = down
         with self.init_scope():
-            self.cup = L.Convolution2D(in_ch, out_ch,5,1,2,initialW=w)
-            self.cpara = L.Convolution2D(in_ch, out_ch,3,1,1,initialW=w)
-            self.cdown = L.Convolution2D(in_ch, out_ch, 4,2,1,initialW=w)
+            self.cup = L.Convolution2D(in_ch, out_ch, 5, 1, 2, initialW=w)
+            self.cpara = L.Convolution2D(in_ch, out_ch, 3, 1, 1, initialW=w)
+            self.cdown = L.Convolution2D(in_ch, out_ch, 4, 2, 1, initialW=w)
 
             self.bn0 = L.BatchNormalization(out_ch)
 
@@ -48,9 +48,9 @@ class C1BG(Chain):
         self.up = up
         self.down = down
         with self.init_scope():
-            self.cup = L.Convolution1D(in_ch, out_ch,3,1,1,initialW=w)
-            self.cpara = L.Convolution1D(in_ch, out_ch,3,1,1,initialW=w)
-            self.cdown = L.Convolution1D(in_ch, out_ch, 4,2,1,initialW=w)
+            self.cup = L.Convolution1D(in_ch, out_ch, 3, 1, 1, initialW=w)
+            self.cpara = L.Convolution1D(in_ch, out_ch, 3, 1, 1, initialW=w)
+            self.cdown = L.Convolution1D(in_ch, out_ch, 4, 2, 1, initialW=w)
 
             self.bn0 = L.BatchNormalization(out_ch)
 
@@ -74,7 +74,7 @@ class ResBlock(Chain):
         super(ResBlock, self).__init__()
         with self.init_scope():
             self.cbg0 = C1BG(in_ch, out_ch)
-            self.c0 = L.Convolution1D(in_ch, in_ch, 3,1,1,initialW=w)
+            self.c0 = L.Convolution1D(in_ch, in_ch, 3, 1, 1, initialW=w)
             self.bn0 = L.BatchNormalization(in_ch)
 
     def __call__(self, x):
@@ -92,7 +92,9 @@ class Generator(Chain):
             self.c0 = L.Convolution2D(1, base, (15, 5), 1, (7, 2), initialW=w)
             self.cbg0 = C2BG(int(base/2), base*2, down=True)
             self.cbg1 = C2BG(base, base*4, down=True)
-            self.cbg2 = C2BG(base*2, base*4, down=True)
+            #self.cbg2 = C2BG(base*2, base*4, down=True)
+            self.cc2 = L.Convolution2D(base*2, base*4, (3, 4), (1, 2), (1, 1), initialW=w)
+            self.bb2 = L.BatchNormalization(base*4)
             
             self.c1 = L.Convolution1D(2560, base*2, 1, 1, 0, initialW=w)
             self.bn1 = L.BatchNormalization(base*2)
@@ -107,7 +109,9 @@ class Generator(Chain):
             self.c2 = L.Convolution1D(base*2, 2560, 1, 1, 0, initialW=w)
             self.bn2 = L.BatchNormalization(2560)
 
-            self.cbg3 = C2BG(base*2, base*8, up=True)
+            self.dc3 = L.Deconvolution2D(base*2, base*8, (3, 4), (1, 2), (1, 1), initialW=w)
+            self.bb3 = L.BatchNormalization(base*8)
+            #self.cbg3 = C2BG(base*2, base*8, up=True)
             self.cbg4 = C2BG(base*4, base*8, up=True)
             self.cbg5 = C2BG(base*4, 72, up=True)
             
@@ -118,8 +122,9 @@ class Generator(Chain):
         h = glu(self.c0(x))
         h = self.cbg0(h)
         h = self.cbg1(h)
-        h = self.cbg2(h)
-        h = F.transpose(h, (0, 1, 3, 2)).reshape(b, 2560, 16)
+        #h = self.cbg2(h)
+        h = glu(self.bb2(self.cc2(h)))
+        h = F.transpose(h, (0, 1, 3, 2)).reshape(b, 2560, 32)
         h = self.bn1(self.c1(h))
         h = self.res0(h)
         h = self.res1(h)
@@ -128,7 +133,64 @@ class Generator(Chain):
         h = self.res4(h)
         h = self.res5(h)
         h = self.bn2(self.c2(h))
-        h = F.transpose(F.reshape(h, (b, 256, 10, 16)), (0, 1, 3, 2))
+        h = F.transpose(F.reshape(h, (b, 256, 10, 32)), (0, 1, 3, 2))
+        #h = self.cbg3(h)
+        h = glu(self.bb3(self.dc3(h)))
+        h = self.cbg4(h)
+        h = self.cbg5(h)
+        h = self.c3(h)
+
+        return h
+
+
+class ResBlock_2D(Chain):
+    def __init__(self, in_ch, out_ch):
+        w = initializers.Normal(0.02)
+        super(ResBlock_2D, self).__init__()
+        with self.init_scope():
+            self.cbg0 = C2BG(in_ch, out_ch)
+            self.c0 = L.Convolution2D(in_ch, in_ch, 3, 1, 1, initialW=w)
+            self.bn0 = L.BatchNormalization(in_ch)
+
+    def __call__(self, x):
+        h = self.cbg0(x)
+        h = self.bn0(self.c0(h))
+
+        return h + x
+
+
+class Generator_2D(Chain):
+    def __init__(self, base=128):
+        super(Generator_2D, self).__init__()
+        w = initializers.Normal(0.02)
+        with self.init_scope():
+            self.c0 = L.Convolution2D(1, base, (15, 5), 1, (7, 2), initialW=w)
+            self.cbg0 = C2BG(int(base/2), base*2, down=True)
+            self.cbg1 = C2BG(base, base*4, down=True)
+            self.cbg2 = C2BG(base*2, base*4, down=True)
+            self.res0 = ResBlock_2D(base*2, base*4)
+            self.res1 = ResBlock_2D(base*2, base*4)
+            self.res2 = ResBlock_2D(base*2, base*4)
+            self.res3 = ResBlock_2D(base*2, base*4)
+            self.res4 = ResBlock_2D(base*2, base*4)
+            self.res5 = ResBlock_2D(base*2, base*4)
+            self.cbg3 = C2BG(base*2, base*8, up=True)
+            self.cbg4 = C2BG(base*4, base*8, up=True)
+            self.cbg5 = C2BG(base*4, base*2, up=True)
+            self.c3 = L.Convolution2D(base, 1, 3, 1, 1, initialW=w)
+
+    def __call__(self, x):
+        h = self.c0(x)
+        h = glu(self.c0(x))
+        h = self.cbg0(h)
+        h = self.cbg1(h)
+        h = self.cbg2(h)
+        h = self.res0(h)
+        h = self.res1(h)
+        h = self.res2(h)
+        h = self.res3(h)
+        h = self.res4(h)
+        h = self.res5(h)
         h = self.cbg3(h)
         h = self.cbg4(h)
         h = self.cbg5(h)
@@ -144,15 +206,15 @@ class BG(Chain):
             self.bn0 = L.BatchNormalization(out_ch)
 
     def __call__(self, x):
-        h = glu(self.bn0(x))
+        h = glu(x)
 
         return h
 
 
-class Discriminator(Chain):
-    def __init__(self,base=64):
+class DiscriminatorBlock(Chain):
+    def __init__(self, base=64):
         w = initializers.Normal(0.02)
-        super(Discriminator, self).__init__()
+        super(DiscriminatorBlock, self).__init__()
 
         with self.init_scope():
             self.c0 = L.Convolution2D(1, base*2, 3, 1, 1, initialW=w)
@@ -180,26 +242,21 @@ class Discriminator(Chain):
         return h
 
 
-class x4_Discriminator(Chain):
-    def __init__(self,base=64):
-        w = initializers.Normal(0.02)
-        super(x4_Discriminator, self).__init__()
+class MSDiscriminator(Chain):
+    def __init__(self, base=64):
+        super(MSDiscriminator, self).__init__()
+        discriminators = chainer.ChainList()
+        for _ in range(3):
+            discriminators.add_link(DiscriminatorBlock())
 
         with self.init_scope():
-            self.c0 = L.Convolution2D(1, base*2, 3, 1, 1, initialW=w)
-            self.c1 = L.Convolution2D(base, base*4, 3, 2, 1, initialW=w)
-            self.bg1 = BG(base*4)
-            self.c2 = L.Convolution2D(base*2, base*8, 3, 2, 1, initialW=w)
-            self.bg2 = BG(base*8)
-            self.c3 = L.Convolution2D(base*4, base*8, (5, 1), 1, (2, 0), initialW=w)
-            self.bg3 = BG(base*8)
-            self.c4 = L.Convolution2D(base*4, 1, (3, 1), 1, (1, 0), initialW=w)
+            self.dis = discriminators
 
     def __call__(self, x):
-        h = glu(self.c0(x))
-        h = self.bg1(self.c1(h))
-        h = self.bg2(self.c2(h))
-        h = self.bg3(self.c3(h))
-        h = self.c4(h)
+        adv_list = []
+        for index in range(3):
+            h = self.dis[index](x)
+            adv_list.append(h)
+            x = F.average_pooling_2d(x, (1, 3), (1, 2), (0, 1))
 
-        return h
+        return adv_list
