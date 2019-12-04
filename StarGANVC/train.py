@@ -26,19 +26,27 @@ class StarGANVC2LossFunction:
 
         return loss
 
-    def dis_loss(self, discriminator, y_fake, x, y_label, x_label):
+    def dis_loss(self, discriminator, y_fake, x, y_label, x_label, residual):
         x = chainer.Variable(x.data)
-        fake = discriminator(y_fake, y_label)
+
+        if residual:
+            fake = discriminator(y_fake + x, y_label)
+        else:
+            fake = discriminator(y_fake, y_label)
+
         real = discriminator(x, x_label)
 
-        loss = self._zero_centered_gradient_penalty(fake, y_fake)
-        loss += self._zero_centered_gradient_penalty(real, x)
+        #loss = self._zero_centered_gradient_penalty(fake, y_fake)
+        #loss += self._zero_centered_gradient_penalty(real, x)
 
-        return F.mean(F.softplus(-real)), F.mean(F.softplus(fake)), loss
+        return F.mean(F.softplus(-real)), F.mean(F.softplus(fake))
 
     @staticmethod
-    def gen_loss(discriminator, y_fake, x_fake, x, y_label):
-        fake = discriminator(y_fake, y_label)
+    def gen_loss(discriminator, y_fake, x_fake, x, y_label, residual):
+        if residual:
+            fake = discriminator(y_fake + x, y_label)
+        else:
+            fake = discriminator(y_fake, y_label)
 
         loss = F.mean(F.softplus(-fake))
 
@@ -49,7 +57,7 @@ class StarGANVC2LossFunction:
         return 5.0 * F.mean_absolute_error(x_identity, x)
 
 
-def train(epochs, iterations, batchsize, adv_type, modeldir, data_path):
+def train(epochs, iterations, batchsize, adv_type, modeldir, data_path, residual):
     # Dataset Definition
     dataloader = DatasetLoader(data_path)
 
@@ -69,11 +77,6 @@ def train(epochs, iterations, batchsize, adv_type, modeldir, data_path):
     for epoch in range(epochs):
         sum_loss = 0
         for batch in range(0, iterations, batchsize):
-            advloss_dis_real_log = open("advloss_dis_real.log", "a")
-            advloss_dis_fake_log = open("advloss_dis_fake.log", "a")
-            advloss_gen_fake_log = open("advloss_gen_fake.log", "a")
-            cycle_loss_log = open("cycle_loss.log", "a")
-            identity_loss_log = open("identity_loss.log", "a")
             x_sp, x_label, y_sp, y_label = dataloader.train(batchsize)
 
             if adv_type == 'sat':
@@ -86,43 +89,56 @@ def train(epochs, iterations, batchsize, adv_type, modeldir, data_path):
             y_fake.unchain_backward()
 
             if adv_type == 'sat':
-                advloss_dis_real, advloss_dis_fake, grad_loss = lossfunc.dis_loss(
+                advloss_dis_real, advloss_dis_fake = lossfunc.dis_loss(
                     discriminator,
                     y_fake,
                     x_sp,
                     F.concat([y_label, x_label]),
-                    F.concat([x_label, y_label])
+                    F.concat([x_label, y_label]),
+                    residual
                 )
             elif adv_type == 'orig':
-                advloss_dis_real, advloss_dis_fake, grad_loss = lossfunc.dis_loss(
+                advloss_dis_real, advloss_dis_fake = lossfunc.dis_loss(
                     discriminator,
                     y_fake,
                     x_sp,
                     y_label,
-                    x_label
+                    x_label,
+                    residual
                 )
             else:
                 raise AttributeError
 
-            loss = advloss_dis_real + advloss_dis_fake + grad_loss
+            loss = advloss_dis_real + advloss_dis_fake
             discriminator.cleargrads()
             loss.backward()
             dis_opt.update()
             loss.unchain_backward()
 
-            advloss_dis_real_log.write(f"{advloss_dis_real.data}\n")
-            advloss_dis_fake_log.write(f"{advloss_dis_fake.data}\n")
-
             if adv_type == 'sat':
                 y_fake = generator(x_sp, F.concat([y_label, x_label]))
                 x_fake = generator(y_fake, F.concat([x_label, y_label]))
                 x_identity = generator(x_sp, F.concat([x_label, x_label]))
-                advloss_gen_fake, cycle_loss = lossfunc.gen_loss(discriminator, y_fake, x_fake, x_sp, F.concat([y_label, x_label]))
+                advloss_gen_fake, cycle_loss = lossfunc.gen_loss(
+                    discriminator,
+                    y_fake,
+                    x_fake,
+                    x_sp,
+                    F.concat([y_label, x_label]),
+                    residual
+                )
             elif adv_type == 'orig':
                 y_fake = generator(x_sp, y_label)
                 x_fake = generator(y_fake, x_label)
                 x_identity = generator(x_sp, x_label)
-                advloss_gen_fake, cycle_loss = lossfunc.gen_loss(discriminator, y_fake, x_fake, x_sp, y_label)
+                advloss_gen_fake, cycle_loss = lossfunc.gen_loss(
+                    discriminator,
+                    y_fake,
+                    x_fake,
+                    x_sp,
+                    y_label,
+                    residual
+                )
             else:
                 raise AttributeError
 
@@ -136,16 +152,6 @@ def train(epochs, iterations, batchsize, adv_type, modeldir, data_path):
             loss.backward()
             gen_opt.update()
             loss.unchain_backward()
-
-            advloss_gen_fake_log.write(f"{advloss_gen_fake.data}\n")
-            cycle_loss_log.write(f"{cycle_loss.data}\n")
-            identity_loss_log.write(f"{identity_loss.data}\n")
-
-            advloss_dis_real_log.close()
-            advloss_dis_fake_log.close()
-            advloss_gen_fake_log.close()
-            cycle_loss_log.close()
-            identity_loss_log.close()
 
             sum_loss += loss.data
 
@@ -162,11 +168,12 @@ if __name__ == "__main__":
     parser.add_argument('--e', type=int, default=50, help="the number of epochs")
     parser.add_argument('--i', type=int, default=10000, help="the number of iterations")
     parser.add_argument('--b', type=int, default=16, help="batch size")
+    parser.add_argument('--res', action="stroe_true", help="enable residual connenction")
     parser.add_argument('--adv_type', type=str, default='sat', help="the type of adversarial loss")
     args = parser.parse_args()
 
-    data_path = Path('./starganvc_sp')
-    modeldir = Path('modeldirCIN_gp')
+    data_path = Path('./starganvc_sp/')
+    modeldir = Path('modeldirCIN_res')
     modeldir.mkdir(exist_ok=True)
 
-    train(args.e, args.i, args.b, args.adv_type, modeldir, data_path)
+    train(args.e, args.i, args.b, args.adv_type, modeldir, data_path, args.res)

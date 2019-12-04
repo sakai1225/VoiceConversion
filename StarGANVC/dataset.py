@@ -42,7 +42,7 @@ class DatasetLoader:
     def _variable(array_list, array_type='float'):
         if array_type == 'float':
             return chainer.as_variable(xp.array(array_list).astype(xp.float32))
-        
+
         else:
             return chainer.as_variable(xp.array(array_list).astype(xp.int32))
 
