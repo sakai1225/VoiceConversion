@@ -16,9 +16,10 @@ Execute the command line below.
 $ python train.py --path <NPY_PATH>
 ```
 
-`NPY_PATH` is a directory which contains training npy files.
+`NPY_PATH` is a directory which contains training npy files.  
 npy file includes spectral envelope extracted by WORLD.
-I assume the path structure of `IMG_PATH` below.
+
+I assume the path structure of `NPU_PATH` below.
 
 ```
 IMG_PATH - dir1 - file1
