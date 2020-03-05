@@ -10,7 +10,18 @@ def weights_init_normal(m):
         init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find('Linear') != -1:
         init.normal(m.weight.data, 0.0, 0.02)
-    elif classname.find('BatchNorm2d') != -1:
+    elif classname.find('BatchNorm') != -1:
+        init.normal_(m.weight.data, 1.0, 0.02)
+        init.constant_(m.bias.data, 0.0)
+
+
+def weights_init_orthogonal(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        init.orthogonal_(m.weight.data)
+    elif classname.find('Linear') != -1:
+        init.orthogonal_(m.weight.data)
+    elif classname.find('BatchNorm') != -1:
         init.normal_(m.weight.data, 1.0, 0.02)
         init.constant_(m.bias.data, 0.0)
 
@@ -37,10 +48,10 @@ def weights_init_kaiming(m):
         init.constant_(m.bias.data, 0.0)
 
 
-def init_weights(net, init_type='normal'):
+def init_weights(net, init_type='ortho'):
     print('initialization method [%s]' % init_type)
-    if init_type == 'normal':
-        net.apply(weights_init_normal)
+    if init_type == 'ortho':
+        net.apply(weights_init_orthogonal)
     elif init_type == 'xavier':
         net.apply(weights_init_xavier)
     elif init_type == 'kaiming':
@@ -164,6 +175,40 @@ class AffineTransform(nn.Module):
         return self.c0(z)
 
 
+class Bank(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(Bank, self).__init__()
+
+        self.bank0 = nn.Sequential(
+            nn.Conv1d(in_ch, out_ch, 3, 1, 1),
+            nn.ReLU()
+        )
+        self.bank1 = nn.Sequential(
+            nn.Conv1d(in_ch, out_ch, 5, 1, 2),
+            nn.ReLU()
+        )
+        self.bank2 = nn.Sequential(
+            nn.Conv1d(in_ch, out_ch, 7, 1, 3),
+            nn.ReLU()
+        )
+        self.bank3 = nn.Sequential(
+            nn.Conv1d(in_ch, out_ch, 9, 1, 4),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        h_list = []
+        h_list.append(self.bank0(x))
+        h_list.append(self.bank1(x))
+        h_list.append(self.bank2(x))
+        h_list.append(self.bank3(x))
+        h_list.append(x)
+
+        h = torch.cat(h_list, dim=1)
+
+        return h
+
+
 class SpeakerEncoderBlock(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(SpeakerEncoderBlock, self).__init__()
@@ -245,8 +290,10 @@ class SpeakerEncoder(nn.Module):
     def __init__(self, dim, base=128):
         super(SpeakerEncoder, self).__init__()
 
-        self.convbank = nn.Sequential(
-            nn.Conv1d(dim, base, 7, 1, 3),
+        self.convbank = Bank(dim, base)
+
+        self.in_layer = nn.Sequential(
+            nn.Conv1d(base*8, base, 1, 1, 0),
             nn.ReLU()
         )
 
@@ -265,6 +312,7 @@ class SpeakerEncoder(nn.Module):
 
     def forward(self, x):
         h = self.convbank(x)
+        h = self.in_layer(h)
         h = self.blocks(h)
         h = self.gap(h)
         h = self.conn(h.squeeze(2))
@@ -276,9 +324,11 @@ class ContentEncoder(nn.Module):
     def __init__(self, dim, base=128):
         super(ContentEncoder, self).__init__()
 
-        self.convbank = nn.Sequential(
-            nn.Conv1d(dim, base, 7, 1, 3),
-            nn.ReLU()
+        self.convbank = Bank(dim, base)
+        self.in_layer = nn.Sequential(
+            nn.Conv1d(base*8, base, 1, 1, 0),
+            nn.ReLU(),
+            nn.InstanceNorm1d(base)
         )
 
         self.blocks = nn.Sequential(
@@ -292,6 +342,7 @@ class ContentEncoder(nn.Module):
 
     def forward(self, x):
         h = self.convbank(x)
+        h = self.in_layer(h)
         h = self.blocks(h)
 
         mu = self.lm(h)

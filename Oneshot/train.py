@@ -12,28 +12,49 @@ from model import Model
 l1loss = nn.L1Loss()
 
 
-def reconstruction_loss(y, t):
-    return 10 * l1loss(y, t)
+class OneshotLossCalculator:
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def reconstruction_loss(y, t):
+        return 10 * l1loss(y, t)
+
+    @staticmethod
+    def kl_loss(sigma, mu):
+        return 0.5 * torch.mean(torch.exp(sigma) + mu ** 2 - 1 - sigma)
 
 
-def kl_loss(sigma, mu):
-    return 0.001 * 0.5 * torch.mean(torch.exp(sigma) + mu ** 2 - 1 - sigma)
+def train(epochs,
+          interval,
+          batchsize,
+          modeldir,
+          extension,
+          time_width,
+          learning_rate,
+          beta1,
+          beta2,
+          weight_decay,
+          annealing,
+          kl_interval,
+          data_path):
 
-
-def train(epochs, batchsize, iterations, annealing, melpath, modeldir):
     # Dataset definition
-    dataset = JVSDataset(melpath)
-    collator = AudioCollate()
+    dataset = JVSDataset(data_path, extension)
+    collator = AudioCollate(time_width)
 
     # Model definition
     model = Model(dim=512)
     model.cuda()
     model.train()
     optimizer = torch.optim.Adam(model.parameters(),
-                                 lr=0.0005,
-                                 betas=(0.9, 0.999),
+                                 lr=learning_rate,
+                                 betas=(beta1, beta2),
                                  amsgrad=True,
-                                 weight_decay=0.0001)
+                                 weight_decay=weight_decay)
+
+    # Loss function definition
+    lossfunc = OneshotLossCalculator()
 
     iteration = 0
 
@@ -49,18 +70,21 @@ def train(epochs, batchsize, iterations, annealing, melpath, modeldir):
             iteration += 1
             x = data
             y, mu, sigma = model(x, x)
-            loss = reconstruction_loss(y, x)
-            if iteration < annealing:
-                kl_weight = 1.0 * iteration / annealing
-            else:
-                kl_weight = 1.0
-            loss += kl_weight * kl_loss(sigma, mu)
+            loss = lossfunc.reconstruction_loss(y, x)
+
+            if iteration % kl_interval == 0:
+                if iteration < annealing:
+                    kl_weight = 1.0 * iteration / annealing
+                else:
+                    kl_weight = 1.0
+
+                loss += kl_weight * lossfunc.kl_loss(sigma, mu)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            if iteration % iterations == 0:
+            if iteration % interval == 1:
                 torch.save(model.state_dict(), f"{modeldir}/model_{iteration}.pt")
 
             print(f"iteration: {iteration} loss: {loss.data}")
@@ -69,14 +93,23 @@ def train(epochs, batchsize, iterations, annealing, melpath, modeldir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Oneshot")
     parser.add_argument("--e", type=int, default=2000, help="the number of epochs")
-    parser.add_argument("--b", type=int, default=128, help="batch size")
-    parser.add_argument("--i", type=int, default=2000, help="interval")
-    parser.add_argument("--a", type=int, default=20000, help="annealing iteration")
+    parser.add_argument("--i", type=int, default=2000, help="interval of snapshot")
+    parser.add_argument("--b", type=int, default=192, help="batch size")
+    parser.add_argument("--modeldir", type=Path, default="modeldir", help="model output directory")
+    parser.add_argument("--ext", type=str, default=".npy", help="extension of training data")
+    parser.add_argument("--tw", type=int, default=128, help="time width of spectral envelope")
+    parser.add_argument("--lr", type=float, default=0.0005, help="learning rate of Adam")
+    parser.add_argument("--b1", type=float, default=0.9, help="beta1 of Adam")
+    parser.add_argument("--b2", type=float, default=0.999, help="beta2 of Adam")
+    parser.add_argument("--wd", type=float, default=0.0001, help="weight decay")
+    parser.add_argument("--a", type=int, default=50000, help="annealing iteration")
+    parser.add_argument("--kli", type=int, default=1000, help="interval of kl loss")
+    parser.add_argument("--path", type=Path, help="path which includes training data")
 
     args = parser.parse_args()
 
-    melpath = Path("./melspectrogram2/train/")
-    modeldir = Path("./modeldir2")
+    modeldir = args.modeldir
     modeldir.mkdir(exist_ok=True)
 
-    train(args.e, args.b, args.i, args.a, melpath, modeldir)
+    train(args.e, args.i, args.b, modeldir, args.ext, args.tw, args.lr,
+          args.b1, args.b2, args.wd, args.a, args.kli, args.path)

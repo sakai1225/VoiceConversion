@@ -1,12 +1,14 @@
 import torch
 import librosa
-import numpy as np
+import argparse
 import os
+import numpy as np
 
 from torch.utils.data import Dataset
 from librosa.core import load
 from pathlib import Path
 from utils import get_spectrograms
+from hyperparams import Hyperparams as hp
 
 
 class JVSPreprocess:
@@ -17,41 +19,54 @@ class JVSPreprocess:
         self.dirlist = [dirs for dirs in os.listdir(str(path)) if not os.path.isfile(str(path) + dirs)]
         print(self.dirlist)
 
-    def audio2melsp(self,
-                    audio,
-                    melsize=512,
-                    fftsize=2048,
-                    window_size=int(22050 * 0.05),
-                    window_shift_size=int(22050 * 0.0125)):
-        """Conversion audio to mel-spectrogram
-        
+    @staticmethod
+    def get_spectrograms(fpath):
+        '''Returns normalized log(melspectrogram) and log(magnitude) from `sound_file`.
         Args:
-            audio (numpy.float): audio data
-            melsize (int, optional): Defaults to 80. the number of mel bins
-            fftsize (int, optional): Defaults to 512. FFT size
-            window_size (int, optional): Defaults to 400. The width of window
-            window_shift_size (int, optional): Defaults to 160. The shift size of window
-        
+        sound_file: A string. The full path of a sound file.
         Returns:
-            numpy.float: mel-spectrogram
-        """
+        mel: A 2d array of shape (T, n_mels) <- Transposed
+        mag: A 2d array of shape (T, 1+n_fft/2) <- Transposed
+        '''
 
-        window = librosa.filters.get_window('hann', window_size, fftbins=True)
-        window = window.reshape((-1, 1))
+        # Loading sound file
+        y, sr = librosa.load(fpath, sr=hp.sr)
 
-        frame = librosa.util.frame(audio, frame_length=window_size, hop_length=window_shift_size)
-        frame = window * frame
+        # Trimming
+        y, _ = librosa.effects.trim(y, top_db=hp.top_db)
 
-        stft = np.fft.rfft(frame.T, n=fftsize)
-        mel = librosa.feature.melspectrogram(S=np.abs(stft.T), n_mels=melsize)
+        # Preemphasis
+        y = np.append(y[0], y[1:] - hp.preemphasis * y[:-1])
 
-        return mel
+        # stft
+        linear = librosa.stft(y=y,
+                              n_fft=hp.n_fft,
+                              hop_length=hp.hop_length,
+                              win_length=hp.win_length)
+
+        # magnitude spectrogram
+        mag = np.abs(linear)  # (1+n_fft//2, T)
+
+        # mel spectrogram
+        mel_basis = librosa.filters.mel(hp.sr, hp.n_fft, hp.n_mels)  # (n_mels, 1+n_fft//2)
+        mel = np.dot(mel_basis, mag)  # (n_mels, t)
+
+        # to decibel
+        mel = 20 * np.log10(np.maximum(1e-5, mel))
+        mag = 20 * np.log10(np.maximum(1e-5, mag))
+
+        # normalize
+        mel = np.clip((mel - hp.ref_db + hp.max_db) / hp.max_db, 1e-8, 1)
+        mag = np.clip((mag - hp.ref_db + hp.max_db) / hp.max_db, 1e-8, 1)
+
+        # Transpose
+        mel = mel.T.astype(np.float32)  # (T, n_mels)
+        mag = mag.T.astype(np.float32)  # (T, 1+n_fft//2)
+
+        return mel, mag
 
     def _convert(self, path):
-        #audio, _ = load(path, sr=self.sr, mono=True)
-        #melsp = self.audio2melsp(audio)
-
-        melsp, _ = get_spectrograms(path)
+        melsp, _ = self.get_spectrograms(path)
 
         return melsp.T
 
@@ -61,7 +76,6 @@ class JVSPreprocess:
         for wav in nonpara_list:
             nonpara_wav = nonpara_path + wav
             melsp = self._convert(nonpara_wav)
-            print(melsp.shape)
             np.save(f"{str(speaker_out_path)}/{wav}", melsp)
 
         para_path = f"{str(speaker_path)}/parallel100/wav24kHz16bit/"
@@ -74,15 +88,19 @@ class JVSPreprocess:
     def __call__(self):
         for train_speaker in self.dirlist:
             speaker_path = self.path/Path(train_speaker)
+            print(speaker_path)
             speaker_out_path = self.melpath/Path(train_speaker)
             speaker_out_path.mkdir(exist_ok=True)
             self._save(speaker_path, speaker_out_path)
 
 
 class JVSDataset(Dataset):
-    def __init__(self, mel_path: Path):
+    def __init__(self,
+                 mel_path: Path,
+                 extension=".npy"):
+
         self.melpath = mel_path
-        self.mellist = list(mel_path.glob("**/*.npy"))
+        self.mellist = list(mel_path.glob(f"**/*{extension}"))
 
     def __len__(self):
         return len(self.mellist)
@@ -94,8 +112,8 @@ class JVSDataset(Dataset):
 
 
 class AudioCollate:
-    def __init__(self):
-        pass
+    def __init__(self, time_width=128):
+        self.tw = time_width
 
     @staticmethod
     def _normalize(audio):
@@ -105,7 +123,7 @@ class AudioCollate:
         return audio
 
     @staticmethod
-    def _crop(melsp, upper_bound=128):
+    def _crop(melsp, upper_bound):
         if melsp.shape[1] < upper_bound + 1:
             melsp = np.pad(melsp,
                            ((0, 0), (0, upper_bound - melsp.shape[1] + 2)),
@@ -119,8 +137,7 @@ class AudioCollate:
 
     def _prepare(self, melpath):
         melsp = np.load(melpath)
-        #melsp = self._normalize(melsp)
-        melsp = self._crop(melsp)
+        melsp = self._crop(melsp, self.tw)
 
         return melsp
 
@@ -143,8 +160,13 @@ class AudioCollate:
 
 
 if __name__ == "__main__":
-    jvs_path = Path("./jvs_ver1")
-    mel_path = Path("./melspectrogram2/")
+    parser = argparse.ArgumentParser(description="Oneshot Preprocess")
+    parser.add_argument("--jvs_path", type=Path, help="jvs path")
+    parser.add_argument("--mel_path", type=Path, help="preprocess output path")
+    args = parser.parse_args()
+
+    mel_path = args.mel_path
     mel_path.mkdir(exist_ok=True)
-    preprocess = JVSPreprocess(jvs_path, mel_path)
+
+    preprocess = JVSPreprocess(args.jvs_path, mel_path)
     preprocess()
