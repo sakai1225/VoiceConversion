@@ -58,10 +58,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    data_path = Path("./data/speakers_test/")
-    save_path = Path("./data/conversion/")
+    data_path = Path("./StarGAN-VC2/speakers_test/")
+    save_path = Path("./StarGAN-VC2/conversion/")
     save_path.mkdir(exist_ok=True)
-    modeldir = Path("modeldir")
-    
+    modeldir = Path("./StarGAN-VC2/modeldir")
+    data_path = Path("./StarGAN-VC2/dataset")
 
     test(args.e, args.b, data_path, save_path, modeldir, args.n, args.i)
