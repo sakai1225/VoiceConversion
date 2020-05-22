@@ -34,7 +34,6 @@ def test(save_epoch, batchsize, data_path, save_path, modeldir, cls_num):
     
     # Evaluation
     for i, data in enumerate(dataloader):
-        iterations += 1
         x_sp, x_label, y_label = data
         x_to_y = torch.cat([y_label, x_label], dim=1)
         y_to_x = torch.cat([x_label, y_label], dim=1)
