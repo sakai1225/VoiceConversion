@@ -48,9 +48,10 @@ def test(save_epoch, batchsize, data_path, save_path, modeldir, cls_num):
         output.append(y_npy)
 
     # Writer
+    out_array = np.array(output)
+    out_array = 0.8 * out_array / np.max( np.abs(out_array)) # Normalization
     path = str(Path(save_path))+'.wav'
-    write_wav(path, np.array(output), sr=22050)
-    #write_wav(save_path +'output.wav', np.array(output), sr=22050)
+    write_wav(path, out_array, sr=22050)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="StarGANVC2-pytorch")
