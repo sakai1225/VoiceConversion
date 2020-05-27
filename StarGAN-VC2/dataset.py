@@ -161,12 +161,20 @@ class AudioCollator:
 
 
 if __name__ == "__main__":
-    path = Path("./StarGAN-VC2/data/speakers/") #path = Path("./Dataset/Speech/")
-    #path = Path("./StarGAN-VC2/basic5000/")
-    dirlist = ["SF1", "SF2", "TM1", "TM2"] #dirlist = ["fujitou_normal", "tsuchiya_normal", "uemura_normal", "Normal"]
-    #dirlist = ["wav2", "wav3"]
-    outdir = Path("./StarGAN-VC2/dataset-basic5000/")
-    outdir.mkdir(exist_ok=True)
+    path_train = Path("./StarGAN-VC2/data/speakers/") #path = Path("./Dataset/Speech/")
+    path_test = Path("./StarGAN-VC2/data/speakers_test/")
+    dirlist = ["SF1", "SF2", "TM1", "TM2"]
+    
+    outdir_train = Path("./StarGAN-VC2/dataset/")
+    outdir_test = Path("./StarGAN-VC2/dataset_test/")
+    outdir_train.mkdir(exist_ok=True)
+    outdir_test.mkdir(exist_ok=True)
 
-    preprocess = AudioPreprocess(path, dirlist, outdir)
-    preprocess()
+    preprocess_train = AudioPreprocess(path_train, dirlist, outdir_train)
+    preprocess_test = AudioPreprocess(path_test, dirlist, outdir_test)
+    
+    preprocess_train()
+    preprocess_test()
+    
+    
+    
