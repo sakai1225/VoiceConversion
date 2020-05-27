@@ -13,10 +13,10 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from librosa.output import write_wav
 
-def test(save_epoch, batchsize, data_path, save_path, modeldir, cls_num):
+def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_num):
 
     # Dataset definition
-    dataset = AudioDataset(data_path)
+    dataset = AudioDataset(data_path, data_dir)
     collator = AudioCollator(cls_num)
 
     # Model & Optimizer definition
@@ -62,10 +62,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     data_path = Path("./StarGAN-VC2/data/speakers_test/")
+    dir_list = ["SF1", "SF2", "TM1", "TM2"] 
+    
     save_path = Path("./StarGAN-VC2/conversion/output")
     save_path.mkdir(exist_ok=True)
     modeldir = Path("./StarGAN-VC2/modeldir")
-    #data_path = Path("./StarGAN-VC2/dataset")
 
-    test(args.e, args.b, data_path, save_path, modeldir, args.n)
+
+    test(args.e, args.b, data_path, dir_list, save_path, modeldir, args.n)
     #test(args.e, args.b, data_path, save_path, modeldir, args.n, args.i)
