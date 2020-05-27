@@ -39,9 +39,9 @@ def write(writer, loss_kind, loss, iteration):
     writer.add_scalar(loss_kind, loss.item(), iteration)
 
 
-def train(epochs, batchsize, data_path, modeldir, cls_num, duration):
+def train(epochs, batchsize, data_path, data_dir, modeldir, cls_num, duration):
     # Dataset definition
-    dataset = AudioDataset(data_path)
+    dataset = AudioDataset(data_path, data_dir)
     collator = AudioCollator(cls_num)
 
     # Model & Optimizer definition
@@ -135,9 +135,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     data_path = Path("./StarGAN-VC2/dataset")
-    #data_path = Path("./StarGAN-VC2/dataset-basic5000")
+    data_dir = ["SF1", "SF2", "TM1", "TM2"] 
     modeldir = Path("./StarGAN-VC2/modeldir")
     #modeldir = Path("./StarGAN-VC2/modeldir-basic5000")
     modeldir.mkdir(exist_ok=True)
 
-    train(args.e, args.b, data_path, modeldir, args.n, args.i)
+    train(args.e, args.b, data_path, data_dir, modeldir, args.n, args.i)
