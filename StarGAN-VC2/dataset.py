@@ -73,10 +73,10 @@ class AudioPreprocess:
 
 
 class AudioDataset(Dataset):
-    def __init__(self, path:Path):
+    def __init__(self, path:Path, dirlist):
         self.path = path
         self.pathlist = list(path.glob("**/*.npy"))
-        self.dirlist = ["0", "1", "2", "3"]
+        self.dirlist = dirlist
 
     def __len__(self):
         return len(self.pathlist)
