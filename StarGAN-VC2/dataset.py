@@ -89,7 +89,7 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         copy_list = copy.copy(self.dirlist)
-        [src_ind, tgt_ind] = random.sample(len(copy_list),2)
+        [src_ind, tgt_ind] = random.sample(range(len(copy_list)),2)
         src_rnd = copy_list[src_ind]
         tgt_rnd = copy_list[tgt_ind]
         
