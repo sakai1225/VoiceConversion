@@ -55,8 +55,8 @@ def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_nu
     # Writer
     output_wav = np.array(output_wav).flatten()
     input_wav = np.array(input_wav).flatten()
-    out_array = 0.8 * out_array / np.max( np.abs(out_array)) # Normalization
-    in_array = 0.8 * in_array / np.max( np.abs(in_array))
+    out_array = 0.8 * output_wav / np.max( np.abs(output_wav)) # Normalization
+    in_array = 0.8 * input_wav / np.max( np.abs(input_wav))
     path = str(Path(save_path))+'/output.wav'
     wav_write(path, 22050, out_array.astype(np.float32))
     path = str(Path(save_path))+'/input.wav'
