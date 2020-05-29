@@ -98,7 +98,7 @@ class AudioDataset(Dataset):
         src_name = np.random.choice(src_list)
         src_sp = np.load(src_name)
         
-        return src_rnd, tgt_rnd, src_sp
+        return src_ind, tgt_ind, src_sp
 
 
 class AudioCollator:
