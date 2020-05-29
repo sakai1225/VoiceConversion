@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    data_path = Path("./StarGAN-VC2/data/dataset_test/")
+    data_path = Path("./StarGAN-VC2/dataset_test/")
     dir_list = ["SF1", "SF2", "TM1", "TM2"] 
     
     save_path = Path("./StarGAN-VC2/conversion/output")
