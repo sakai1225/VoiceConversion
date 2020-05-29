@@ -22,6 +22,7 @@ def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_nu
     # Model & Optimizer definition
     generator = Generator(cls_num=cls_num)
     generator.load_state_dict(torch.load(f"{modeldir}/generator_{save_epoch - 1}.model"))
+    generator.cuda()
     generator.eval()                    # evaluation mode
 
     # Data loader
