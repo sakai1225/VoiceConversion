@@ -52,7 +52,7 @@ def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_nu
     # Writer
     out_array = np.array(output).flatten()
     out_array = 0.8 * out_array / np.max( np.abs(out_array)) # Normalization
-    path = str(Path(save_path))+'.wav'
+    path = str(Path(save_path))+'/output.wav'
     wav_write(path, 22050, out_array.astype(np.float32))
 
 if __name__ == "__main__":
