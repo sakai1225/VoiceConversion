@@ -11,7 +11,8 @@ from dataset import AudioCollator, AudioDataset
 from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from librosa.output import write_wav
+#from librosa.output import write_wav
+from scipy.io.wavfile import write as wav_write
 
 def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_num):
 
@@ -52,7 +53,7 @@ def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_nu
     out_array = np.array(output)
     out_array = 0.8 * out_array / np.max( np.abs(out_array)) # Normalization
     path = str(Path(save_path))+'.wav'
-    write_wav(path, out_array, sr=22050)
+    wav_write(path, 22050, out_array)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="StarGANVC2-pytorch")
