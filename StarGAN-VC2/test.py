@@ -46,7 +46,7 @@ def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_nu
         # Generator update
         y_eval = generator(x_sp, x_to_y)
         y_npy  = y_eval.to('cpu').detach().numpy().flatten()
-        x_npy  = x_sp.numpy().flatten()
+        x_npy  = x_sp.to('cpu').detach().numpy().flatten()
 
         # Save to List
         output_wav.append(y_npy)
