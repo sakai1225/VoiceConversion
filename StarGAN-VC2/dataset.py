@@ -2,6 +2,7 @@ import pyworld as pw
 import numpy as np
 import copy
 import torch
+import random
 
 from librosa.core import load
 from pathlib import Path
@@ -88,15 +89,15 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         copy_list = copy.copy(self.dirlist)
-        src_rnd = np.random.choice(copy_list)
+        [src_ind, tgt_ind] = random.sample(len(copy_list),2)
+        src_rnd = copy_list[src_ind]
+        tgt_rnd = copy_list[tgt_ind]
+        
         src_path = self.path / Path(src_rnd)
         src_list = list(src_path.glob("*.npy"))
         src_name = np.random.choice(src_list)
         src_sp = np.load(src_name)
-
-        remove_list = self._label_remove(copy_list, src_rnd)
-        tgt_rnd = np.random.choice(remove_list)
-
+        
         return src_rnd, tgt_rnd, src_sp
 
 
