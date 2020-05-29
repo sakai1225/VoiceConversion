@@ -33,7 +33,8 @@ def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_nu
                             collate_fn=collator,
                             drop_last=True)
     dataloader = tqdm(dataloader)
-    output = []
+    output_wav = []
+    input_wav = []
 
     # Evaluation
     for i, data in enumerate(dataloader):
@@ -45,15 +46,22 @@ def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_nu
         # Generator update
         y_eval = generator(x_sp, x_to_y)
         y_npy  = y_eval.to('cpu').detach().numpy().flatten()
+        x_npy  = x_sp.numpy().flatten()
 
         # Save to List
-        output.append(y_npy)
+        output_wav.append(y_npy)
+        input_wav.append(x_npy)
 
     # Writer
-    out_array = np.array(output).flatten()
+    output_wav = np.array(output_wav).flatten()
+    input_wav = np.array(input_wav).flatten()
     out_array = 0.8 * out_array / np.max( np.abs(out_array)) # Normalization
+    in_array = 0.8 * in_array / np.max( np.abs(in_array))
     path = str(Path(save_path))+'/output.wav'
     wav_write(path, 22050, out_array.astype(np.float32))
+    path = str(Path(save_path))+'/input.wav'
+    wav_write(path, 22050, in_array.astype(np.float32))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="StarGANVC2-pytorch")
