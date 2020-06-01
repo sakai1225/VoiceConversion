@@ -159,6 +159,92 @@ class AudioCollator:
         x_sp = self._totensor(x_sp)
 
         return (x_sp, x_label, y_label)
+    
+
+class AudioDataset_test(AudioDataset):
+    def __init__(self, path:Path, dirlist, src_ind, tgt_ind):
+        self.path = path
+        self.pathlist = list(path.glob("**/*.npy"))
+        self.dirlist = dirlist
+        self.src_ind = src_ind
+        self.tgt_ind = tgt_ind
+
+    def __len__(self):
+        return len(self.pathlist)
+
+    def _label_remove(self, copy_list, label):
+        copy_list.remove(str(label))
+
+        return copy_list
+
+    def __getitem__(self, idx):
+        src_ = copy_list[src_ind]
+        
+        src_path = self.path / Path(src_)
+        src_list = list(src_path.glob("*.npy"))
+        src_name = src_list[idx]
+        src_sp = np.load(src_name)
+        
+        return src_ind, tgt_ind, src_sp
+    
+class AudioCollator_test(AudioCollator):
+    def __init__(self, cls_num):
+        self.cls_num = cls_num
+
+    def _make_onehot(self, label):
+        onehot = np.zeros(self.cls_num)
+        onehot[int(label)] = 1
+
+        return onehot
+
+    @staticmethod
+    def _normalize(x, epsilon=1e-8):
+        x_mean = np.mean(x, axis=1, keepdims=True)
+        x_std = np.std(x, axis=1, keepdims=True)
+
+        return (x - x_mean) / x_std
+
+    @staticmethod
+    def _crop(sp, upper_bound=128):
+        if sp.shape[0] < upper_bound + 1:
+            sp = np.pad(sp, ((0, upper_bound-sp.shape[0] + 2), (0, 0)), 'constant', constant_values=0)
+
+        start_point = np.random.randint(sp.shape[0] - upper_bound)
+        cropped = sp[start_point: start_point + upper_bound, :]
+
+        return cropped
+
+    @staticmethod
+    def _totensor(array_list):
+        array = np.array(array_list).astype(np.float32)
+        array = torch.cuda.FloatTensor(array)
+
+        return array
+
+    def __call__(self, batch):
+        x_label = []
+        x_sp = []
+        y_label = []
+
+        for b in batch:
+            x, y, sp = b
+
+            x = self._make_onehot(x)
+            y = self._make_onehot(y)
+
+            sp = self._normalize(sp)
+            sp = self._crop(sp)
+            sp = sp[np.newaxis, :, :]
+
+            x_label.append(x)
+            y_label.append(y)
+            x_sp.append(sp)
+
+        x_label = self._totensor(x_label)
+        y_label = self._totensor(y_label)
+        x_sp = self._totensor(x_sp)
+
+        return (x_sp, x_label, y_label)
 
 
 if __name__ == "__main__":
