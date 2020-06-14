@@ -24,7 +24,6 @@ for file in files:
     synthesized = pw.synthesize(f0, sp, ap, fs)
 
     librosa.output.write_wav(str('./StarGAN-VC2/synthesized/' + str(i) + '.wav'), synthesized, fs)
-    #write(str('./StarGAN-VC2/synthesized/' + str(i) + '.wav'), fs, synthesized)
     i += 1
 
 
