@@ -7,8 +7,8 @@ import os
 from scipy.io import wavfile
 from scipy.io.wavfile import write
 
-def file_name(path):
-    return os.path.splitext(os.path.basename(filepath))[0]
+def file_name(pathname):
+    return os.path.splitext(os.path.basename(pathname))[0]
 
 
 files = glob.glob('./StarGAN-VC2/data/speakers_test/**/*.wav')
