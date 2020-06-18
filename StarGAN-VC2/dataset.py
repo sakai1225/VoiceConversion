@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 
 
 class AudioPreprocess:
-    def __init__(self, path, dirlist, outdir, sr=16000): #sr=22050
+    def __init__(self, path, dirlist, outdir, sr=16000):  # sr=22050
         self.path = path
         self.dirlist = dirlist
         self.outdir = outdir
@@ -23,11 +23,11 @@ class AudioPreprocess:
 
     def audio2accousticfeatures(self, audio):
         """Conversion audio to accoustic features
-        
+
         Args:
             audio (numpy.float): audio data
             sr (int, optional): Defaults to 16000. sampling rate
-        
+
         Returns:
             numpy.float: f0, fundamental frequency
             numpy.float: sp, spectral envelope
@@ -44,12 +44,12 @@ class AudioPreprocess:
 
     def encode_sp(self, sp, mel_bins=36):
         """Conversion spectral envelope to mel spectral envelope
-        
+
         Args:
             sp (numpy.float): Spectral envelope
             sr (int, optional): Defaults to 16000. Sampling rate
             mel_bins (int, optional): Defaults to 36. The number of mel bins
-        
+
         Returns:
             numpy.float: mel spectral envelope
         """
@@ -66,18 +66,22 @@ class AudioPreprocess:
             indir_list = list(indir.glob("*.wav"))
             for inpath in indir_list:
                 audio = self._load(str(inpath))
-                _, sp, _ = self.audio2accousticfeatures(audio)
+                f0, sp, ap = self.audio2accousticfeatures(audio)
                 sp = self.encode_sp(sp)
 
-                outpath = outdir / Path(str(inpath.name[:-4] + '.npy'))
-                np.save(str(outpath), sp)
-
+                outpath_f0 = outdir / Path(str(inpath.name[:-4]) + '_f0.npy')
+                outpath_sp = outdir / Path(str(inpath.name[:-4]) + '_sp.npy')
+                outpath_ap = outdir / Path(str(inpath.name[:-4]) + '_ap.npy')
+                np.save(str(outpath_f0), f0)
+                np.save(str(outpath_sp), sp)
+                np.save(str(outpath_ap), ap)
 
 class AudioDataset(Dataset):
-    def __init__(self, path:Path, dirlist):
+    def __init__(self, path: Path, dirlist, test=False):
         self.path = path
         self.pathlist = list(path.glob("**/*.npy"))
         self.dirlist = dirlist
+        self.test = test
 
     def __len__(self):
         return len(self.pathlist)
@@ -89,15 +93,17 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         copy_list = copy.copy(self.dirlist)
-        [src_ind, tgt_ind] = random.sample(range(len(copy_list)),2)
+        [src_ind, tgt_ind] = random.sample(range(len(copy_list)), 2)
         src_rnd = copy_list[src_ind]
-        tgt_rnd = copy_list[tgt_ind]
-        
+
         src_path = self.path / Path(src_rnd)
         src_list = list(src_path.glob("*.npy"))
-        src_name = np.random.choice(src_list)
+        if self.test:
+            src_name = src_list(idx)
+        else:
+            src_name = np.random.choice(src_list)
         src_sp = np.load(src_name)
-        
+
         return src_ind, tgt_ind, src_sp
 
 
@@ -121,7 +127,7 @@ class AudioCollator:
     @staticmethod
     def _crop(sp, upper_bound=128):
         if sp.shape[0] < upper_bound + 1:
-            sp = np.pad(sp, ((0, upper_bound-sp.shape[0] + 2), (0, 0)), 'constant', constant_values=0)
+            sp = np.pad(sp, ((0, upper_bound - sp.shape[0] + 2), (0, 0)), 'constant', constant_values=0)
 
         start_point = np.random.randint(sp.shape[0] - upper_bound)
         cropped = sp[start_point: start_point + upper_bound, :]
@@ -159,36 +165,10 @@ class AudioCollator:
         x_sp = self._totensor(x_sp)
 
         return (x_sp, x_label, y_label)
-    
 
-class AudioDataset_test(AudioDataset):
-    def __init__(self, path:Path, dirlist, src_ind, tgt_ind):
-        self.path = path
-        self.pathlist = list(path.glob("**/*.npy"))
-        self.dirlist = dirlist
-        self.src_ind = src_ind
-        self.tgt_ind = tgt_ind
-
-    def __len__(self):
-        return len(self.pathlist)
-
-    def _label_remove(self, copy_list, label):
-        copy_list.remove(str(label))
-
-        return copy_list
-
-    def __getitem__(self, idx):
-        src_ = copy_list[src_ind]
-        
-        src_path = self.path / Path(src_)
-        src_list = list(src_path.glob("*.npy"))
-        src_name = src_list[idx]
-        src_sp = np.load(src_name)
-        
-        return src_ind, tgt_ind, src_sp
-    
 class AudioCollator_test(AudioCollator):
     def __init__(self, cls_num):
+        super().__init__(cls_num)
         self.cls_num = cls_num
 
     def _make_onehot(self, label):
@@ -207,7 +187,7 @@ class AudioCollator_test(AudioCollator):
     @staticmethod
     def _crop(sp, upper_bound=128):
         if sp.shape[0] < upper_bound + 1:
-            sp = np.pad(sp, ((0, upper_bound-sp.shape[0] + 2), (0, 0)), 'constant', constant_values=0)
+            sp = np.pad(sp, ((0, upper_bound - sp.shape[0] + 2), (0, 0)), 'constant', constant_values=0)
 
         start_point = np.random.randint(sp.shape[0] - upper_bound)
         cropped = sp[start_point: start_point + upper_bound, :]
@@ -248,10 +228,10 @@ class AudioCollator_test(AudioCollator):
 
 
 if __name__ == "__main__":
-    path_train = Path("./StarGAN-VC2/data/speakers/") #path = Path("./Dataset/Speech/")
+    path_train = Path("./StarGAN-VC2/data/speakers/")  # path = Path("./Dataset/Speech/")
     path_test = Path("./StarGAN-VC2/data/speakers_test/")
     dirlist = ["SF1", "SF2", "TM1", "TM2"]
-    
+
     outdir_train = Path("./StarGAN-VC2/dataset/")
     outdir_test = Path("./StarGAN-VC2/dataset_test/")
     outdir_train.mkdir(exist_ok=True)
@@ -259,9 +239,6 @@ if __name__ == "__main__":
 
     preprocess_train = AudioPreprocess(path_train, dirlist, outdir_train)
     preprocess_test = AudioPreprocess(path_test, dirlist, outdir_test)
-    
+
     preprocess_train()
     preprocess_test()
-    
-    
-    
