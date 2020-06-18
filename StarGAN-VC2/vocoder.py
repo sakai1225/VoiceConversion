@@ -1,3 +1,5 @@
+# Vocoder using WORLD
+
 import pyworld as pw
 import numpy as np
 import glob
