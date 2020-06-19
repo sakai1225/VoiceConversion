@@ -17,7 +17,7 @@ files = glob.glob('./StarGAN-VC2/data/speakers_test/**/*.wav')
 
 for file in files:
     fs, data = wavfile.read(file)
-    name = file_bame(file)
+    name = file_name(file)
     data = data.astype(np.float)  # WORLDはfloat前提のコードになっているのでfloat型にしておく
 
     _f0, t = pw.dio(data, fs)  # 基本周波数の抽出
@@ -29,9 +29,6 @@ for file in files:
     np.save(str('./StarGAN-VC2/calc_ap/' + name + '.npy'), ap)
     np.save(str('./StarGAN-VC2/calc_sp/sp_' + name + '.npy'), sp)
     synthesized = pw.synthesize(f0, sp, ap, fs)
-    synthesized = 0.75/np.max(np.abs(synthesize)) * synthesize # Normalization
+    synthesized = 0.75/np.max(np.abs(synthesized)) * synthesized # Normalization
 
     librosa.output.write_wav(str('./StarGAN-VC2/synthesized/' + name + '.wav'), synthesized, fs)
-
-
-
