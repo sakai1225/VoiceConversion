@@ -28,7 +28,16 @@ for file in files:
     np.save(str('./StarGAN-VC2/calc_f0/' + name + '.npy'), f0)
     np.save(str('./StarGAN-VC2/calc_ap/' + name + '.npy'), ap)
     np.save(str('./StarGAN-VC2/calc_sp/sp_' + name + '.npy'), sp)
+
     synthesized = pw.synthesize(f0, sp, ap, fs)
-    synthesized = 0.75/np.max(np.abs(synthesized)) * synthesized # Normalization
+    synthesized = 0.75/np.max(np.abs(synthesized)) * synthesized  # Normalization
 
     librosa.output.write_wav(str('./StarGAN-VC2/synthesized/' + name + '.wav'), synthesized, fs)
+
+
+f0 = np.load('./StarGAN-VC2/calc_f0/200004.npy')
+ap = np.load('./StarGAN-VC2/calc_ap/200004.npy')
+sp = np.load('./StarGAN-VC2/calc_sp/sp_200004.npy')
+
+synthesized = pw.synthesize(f0, sp, ap, 16000)
+synthesized = 0.75/np.max(np.abs(synthesized)) * synthesized  # Normalization

@@ -1,83 +1,90 @@
-
 # -*- coding: utf-8 -*-
 import torch
 import argparse
-import tensorboardX as tbx
 import torch.nn as nn
 import numpy as  np
 
 from model import Generator, Discriminator
-from dataset import AudioCollator, AudioDataset
+from dataset import AudioCollator, AudioDataset_test
 from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-#from librosa.output import write_wav
-from scipy.io.wavfile import write as wav_write
+# from librosa.output import write_wav
+from synthesizer import synthesized, file_name, dir_name
 
-def test(save_epoch, batchsize, data_path, data_dir, save_path, modeldir, cls_num):
+
+Classes = ["SF1", "SF2", "TM1", "TM2"]
+
+def test(save_epoch, st, data_path, save_path, modeldir):
 
     # Dataset definition
-    dataset = AudioDataset(data_path, data_dir)
-    collator = AudioCollator(cls_num)
+    dataset = AudioDataset_test(data_path, Classes)
+    file_list = dataset.set_speakers(st[0], st[1])
+    collator = AudioCollator(4)
 
     # Model & Optimizer definition
-    generator = Generator(cls_num=cls_num)
-    generator.load_state_dict(torch.load(f"{modeldir}/generator_{save_epoch - 1}.model"))
+    generator = Generator(cls_num=4)
+    generator.load_state_dict(torch.load(f"{modeldir}/generator_{save_epoch}.model"))
     generator.cuda()
-    generator.eval()                    # evaluation mode
+    generator.eval()  # evaluation mode
 
-    # Data loader
-    dataloader = DataLoader(dataset,
-                            batch_size=batchsize,
-                            shuffle=False,
-                            collate_fn=collator,
-                            drop_last=True)
-    dataloader = tqdm(dataloader)
-    output_wav = []
-    input_wav = []
+    save_path_sp = save_path/Path('calc_sp')
+    save_path_sp.mkdir(exist_ok=True)
 
     # Evaluation
-    for i, data in enumerate(dataloader):
-        x_sp, x_label, y_label = data
+    for i, (data, file) in enumerate(zip(dataset, file_list)):
+
+        #   Set Data
+        x_label, y_label, x_sp = data
+        n = len(x_sp)
+        b_n = -(- n // 128)
+
+        x_sp.resize((b_n, 1, 128, x_sp.shape[-1]), refcheck = False)
+        x_label = np.repeat(collator._make_onehot(x_label)[np.newaxis,:], b_n, axis=0)
+        y_label = np.repeat(collator._make_onehot(y_label)[np.newaxis,:], b_n, axis=0)
+
+        x_sp = collator._totensor(x_sp)
+        x_label = collator._totensor(x_label)
+        y_label = collator._totensor(y_label)
         x_to_y = torch.cat([y_label, x_label], dim=1)
-        y_to_x = torch.cat([x_label, y_label], dim=1)
-        x_to_x = torch.cat([x_label, x_label], dim=1)
 
-        # Generator update
+        #   Conversion
         y_eval = generator(x_sp, x_to_y)
-        y_npy  = y_eval.to('cpu').detach().numpy().flatten()
-        x_npy  = x_sp.to('cpu').detach().numpy().flatten()
+        y_npy = y_eval.to('cpu').detach().numpy()
+        y_npy = y_npy.reshape((-1, y_npy.shape[-1]))[:n, :]
 
-        # Save to List
-        output_wav.append(y_npy)
-        input_wav.append(x_npy)
+        #   Save to npy
+        name = file_name(file)
+        np.save(str(save_path_sp) + '/' + name + '.npy', y_npy)
 
-    # Writer
-    output_wav = np.array(output_wav).flatten()
-    input_wav = np.array(input_wav).flatten()
-    out_array = 0.8 * output_wav / np.max( np.abs(output_wav)) # Normalization
-    in_array = 0.8 * input_wav / np.max( np.abs(input_wav))
-    path = str(Path(save_path))+'/output.wav'
-    wav_write(path, 22050, out_array.astype(np.float32))
-    path = str(Path(save_path))+'/input.wav'
-    wav_write(path, 22050, in_array.astype(np.float32))
+    #   Create synthesized wav
+    name = dir_name(dir_name(file_list[0]))
+    synthesized(name + '/calc_f0/',
+                name + '/calc_ap/',
+                str(save_path_sp)+'/',
+                str(save_path)+'/')
+
+    print('Finish')
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="StarGANVC2-pytorch")
-    parser.add_argument("--e", type=int, default=1000, help="saved epoch number")
-    parser.add_argument("--b", type=int, default=8, help="batch size")
-    parser.add_argument("--n", type=int, default=4, help="the number of classes")
+    parser.add_argument("--epoch", type=int, default=30000, help="saved epoch number")
+    parser.add_argument("--batchsize", type=int, default=8, help="batch size")
 
     args = parser.parse_args()
 
-    data_path = Path("./StarGAN-VC2/dataset_test/")
-    dir_list = ["SF1", "SF2", "TM1", "TM2"] 
-    
-    save_path = Path("./StarGAN-VC2/conversion/output")
+    # Set of conversion object: (source, target)
+    # 0: "SF1", 1: "SF2", 2: "TM1", 3: "TM2"
+    convert_from    = 0
+    convert_to      = 0
+    name            = Classes[convert_from]+'_to_'+Classes[convert_to]
+    conversion_set = (convert_from, convert_to)
+
+    data_path = Path('./dataset_test/')
+    save_path = Path('./dataset_test/'+name+'/30000/')
     save_path.mkdir(exist_ok=True)
-    modeldir = Path("./StarGAN-VC2/modeldir")
+    modeldir = Path("E:/modeldir")
 
-
-    test(args.e, args.b, data_path, dir_list, save_path, modeldir, args.n)
-    #test(args.e, args.b, data_path, save_path, modeldir, args.n, args.i)
+    # Notice: batchsize must be 1
+    test(args.epoch, conversion_set, data_path, save_path, modeldir)

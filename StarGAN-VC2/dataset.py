@@ -60,28 +60,52 @@ class AudioPreprocess:
 
     def __call__(self):
         for index, directory in enumerate(self.dirlist):
-            outdir = self.outdir / Path(str(index))
-            outdir.mkdir(exist_ok=True)
+
+            #   フォルダ作成
+            outdir = self.outdir / Path(directory)
+            outdir_f0 = outdir / Path('calc_f0')
+            outdir_ap = outdir / Path('calc_ap')
+            outdir_sp = outdir / Path('calc_sp')
+            outdir_f0.mkdir(exist_ok=True)
+            outdir_ap.mkdir(exist_ok=True)
+            outdir_sp.mkdir(exist_ok=True)
+
             indir = self.path / Path(directory)
             indir_list = list(indir.glob("*.wav"))
+
             for inpath in indir_list:
                 audio = self._load(str(inpath))
                 f0, sp, ap = self.audio2accousticfeatures(audio)
                 sp = self.encode_sp(sp)
-
-                outpath_f0 = outdir / Path(str(inpath.name[:-4]) + '_f0.npy')
-                outpath_sp = outdir / Path(str(inpath.name[:-4]) + '_sp.npy')
-                outpath_ap = outdir / Path(str(inpath.name[:-4]) + '_ap.npy')
+                name = Path(str(inpath.name[:-4]+ '.npy'))
+                outpath_f0 = outdir_f0 / name
+                outpath_sp = outdir_sp / name
+                outpath_ap = outdir_ap / name
                 np.save(str(outpath_f0), f0)
                 np.save(str(outpath_sp), sp)
                 np.save(str(outpath_ap), ap)
 
+
+def decode_sp(sp, sr=16000, fftsize=1024):
+    """Conversion mel spectral envelope to spectral envelope
+    Args:
+        sp (numpy.float): Mel spectral envelope
+        sr (int, optional): Defaults to 16000. Sampling rate
+        fftsize (int, optional): Defaults to 1024. The size of fft
+
+    Returns:
+        numpy.float: mel spectral envelope
+    """
+    encoded_sp = pw.decode_spectral_envelope(sp.astype(np.double), sr, fftsize)
+
+    return encoded_sp
+
+
 class AudioDataset(Dataset):
-    def __init__(self, path: Path, dirlist, test=False):
+    def __init__(self, path: Path, dirlist):
         self.path = path
-        self.pathlist = list(path.glob("**/*.npy"))
-        self.dirlist = dirlist
-        self.test = test
+        self.pathlist = list(path.glob("*/calc_sp/*.npy"))
+        self.dirlist = dirlist      # List of speakers (4)
 
     def __len__(self):
         return len(self.pathlist)
@@ -93,18 +117,41 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         copy_list = copy.copy(self.dirlist)
-        [src_ind, tgt_ind] = random.sample(range(len(copy_list)), 2)
-        src_rnd = copy_list[src_ind]
+        [src_ind, tgt_ind] = random.sample(range(len(copy_list)), 2)    # Pick up 2 speakers from 4 speakers
+        src_rnd = copy_list[src_ind]            # Picked up list
 
-        src_path = self.path / Path(src_rnd)
-        src_list = list(src_path.glob("*.npy"))
-        if self.test:
-            src_name = src_list(idx)
-        else:
-            src_name = np.random.choice(src_list)
+        src_path = self.path / Path(src_rnd)    # path/speaker_list (ex:dataset/SF1)
+        src_list = list(src_path.glob("calc_sp/*.npy")) # numpy list (ex:dataset/SF1/*.npy)
+        src_name = np.random.choice(src_list)
         src_sp = np.load(src_name)
 
         return src_ind, tgt_ind, src_sp
+
+
+class AudioDataset_test(AudioDataset):
+
+    def __init__(self, path: Path, dirlist):
+        super().__init__(path, dirlist)
+        self.path = path
+        self.dirlist = dirlist      # List of speakers (4)
+        self.src_list = []
+
+    def __len__(self):
+        return len(self.src_list)
+
+    def set_speakers(self, src_ind, tgt_ind):
+        self.src_ind = src_ind
+        self.tgt_ind = tgt_ind
+        copy_list = copy.copy(self.dirlist)
+        src_name = copy_list[src_ind]
+        src_path = self.path / Path(src_name)  # path/speaker_list (ex:dataset/SF1)
+        self.src_list = list(src_path.glob('calc_sp/*.npy'))  # numpy list (ex:dataset/SF1/*.npy)
+        return self.src_list
+
+    def __getitem__(self, idx):
+        src_name = self.src_list[idx]
+        src_sp = np.load(src_name)
+        return self.src_ind, self.tgt_ind, src_sp
 
 
 class AudioCollator:
@@ -228,12 +275,12 @@ class AudioCollator_test(AudioCollator):
 
 
 if __name__ == "__main__":
-    path_train = Path("./StarGAN-VC2/data/speakers/")  # path = Path("./Dataset/Speech/")
-    path_test = Path("./StarGAN-VC2/data/speakers_test/")
+    path_train = Path("./data/speakers/")  # path = Path("./Dataset/Speech/")
+    path_test = Path("./data/speakers_test/")
     dirlist = ["SF1", "SF2", "TM1", "TM2"]
 
-    outdir_train = Path("./StarGAN-VC2/dataset/")
-    outdir_test = Path("./StarGAN-VC2/dataset_test/")
+    outdir_train = Path("./dataset/")
+    outdir_test = Path("./dataset_test/")
     outdir_train.mkdir(exist_ok=True)
     outdir_test.mkdir(exist_ok=True)
 
